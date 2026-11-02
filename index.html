@@ -45,13 +45,14 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.7);
             padding: 10px 20px;
             border-radius: 15px;
             color: #fff;
             backdrop-filter: blur(5px);
             border: 2px solid #f39c12;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            pointer-events: auto;
         }
         .game-title {
             font-size: 22px;
@@ -73,18 +74,19 @@
         }
         .aim-instruction {
             position: absolute;
-            bottom: 30px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.8);
             color: #00ffcc;
             padding: 8px 20px;
             border-radius: 20px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
             border: 1px solid #00ffcc;
             box-shadow: 0 0 10px rgba(0,255,204,0.3);
             animation: pulse 1.5s infinite;
+            pointer-events: none;
         }
         @keyframes pulse {
             0% { opacity: 0.7; transform: translateX(-50%) scale(0.98); }
@@ -142,14 +144,15 @@
             background: #27ae60;
             color: white;
             border: none;
-            padding: 12px 30px;
-            font-size: 18px;
+            padding: 14px 30px;
+            font-size: 20px;
             font-weight: bold;
-            border-radius: 10px;
+            border-radius: 12px;
             cursor: pointer;
             box-shadow: 0 5px 0 #1e8449;
             transition: all 0.1s;
-            margin: 5px;
+            margin: 8px;
+            width: 100%;
         }
         .btn:active {
             transform: translateY(4px);
@@ -162,34 +165,6 @@
         .btn-retry:active {
             box-shadow: 0 1px 0 #d35400;
         }
-        .level-select-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 10px;
-            max-height: 250px;
-            overflow-y: auto;
-            margin-bottom: 20px;
-            padding: 10px;
-            background: rgba(0,0,0,0.3);
-            border-radius: 10px;
-        }
-        .level-btn {
-            background: #34495e;
-            color: #fff;
-            border: 1px solid #7f8c8d;
-            padding: 10px;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .level-btn.active {
-            background: #f1c40f;
-            color: #000;
-            border-color: #f39c12;
-        }
-        /* Custom scrollbar */
-        .level-select-grid::-webkit-scrollbar { width: 6px; }
-        .level-select-grid::-webkit-scrollbar-thumb { background: #f1c40f; border-radius: 3px; }
     </style>
     <!-- Three.js & Cannon.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -208,7 +183,7 @@
                     <div class="stat-box" id="ammo-display">الأحجار: 5</div>
                 </div>
             </div>
-            <div class="aim-instruction">🎯 اسحب للخلف وللأعلى للتصويب بالإصبع</div>
+            <div class="aim-instruction">🎯 اسحب الحجر للأسفل ثم اترك لإطلاق النار بدقة</div>
         </div>
 
         <!-- Result Modal -->
@@ -216,17 +191,7 @@
             <div class="modal-content">
                 <div class="modal-title" id="modal-title">النتيجة</div>
                 <div class="modal-msg" id="modal-msg">---</div>
-                <button class="btn" id="modal-btn">المستوى التالي</button>
-                <button class="btn btn-retry" id="select-lvl-btn">اختيار مستوى</button>
-            </div>
-        </div>
-
-        <!-- Level Select Modal -->
-        <div class="modal" id="level-modal">
-            <div class="modal-content">
-                <div class="modal-title">اختر المستوى (1 - 100)</div>
-                <div class="level-select-grid" id="level-grid"></div>
-                <button class="btn btn-retry" id="close-level-btn">إغلاق</button>
+                <button class="btn" id="modal-btn">ابدأ اللعبة</button>
             </div>
         </div>
     </div>
@@ -280,35 +245,37 @@
             }
         }
 
-        // Game Setup Variables
+        // Game Variables
         let currentLevel = 1;
         let ammo = 5;
+        let maxAmmo = 5;
         let gameActive = true;
         let targets = [];
         let activeStones = [];
-        let trajectoryPoints = [];
+        let trajectoryLine;
+        let cannonMesh, currentStoneMesh;
 
         // ThreeJS & Cannon Variables
         let scene, camera, renderer, world;
-        let stoneMaterial, tableMaterial, blockMaterial;
 
-        // Interaction
+        // Interaction & Aiming
         let isDragging = false;
         let dragStart = { x: 0, y: 0 };
         let dragCurrent = { x: 0, y: 0 };
+        const slingPos = new THREE.Vector3(0, 0.8, 7.5); // مرئي ومكان واضح في الأسفل
 
         const winMessages = ["أحسنت ابن المطي! 👏", "ممتاز يا حيوان! 🎉"];
         const failMessage = "طيح الله حظك! 💩";
 
         function init() {
-            // Three.js Scene
+            // Scene Setup
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // السماء
-            scene.fog = new THREE.FogExp2(0x87CEEB, 0.015);
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.FogExp2(0x87CEEB, 0.012);
 
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 5, 18);
-            camera.lookAt(0, 3, 0);
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 3.2, 11); // زاوية متميزة ترى المدفع والحجر والأهداف بوضوح
+            camera.lookAt(0, 2.8, 0);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -316,7 +283,7 @@
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            // Cannon.js Physics World
+            // Physics World
             world = new CANNON.World();
             world.gravity.set(0, -9.82, 0);
             world.broadphase = new CANNON.NaiveBroadphase();
@@ -324,47 +291,45 @@
             world.defaultContactMaterial.restitution = 0.2;
 
             // Lights
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
             scene.add(ambientLight);
 
-            const sunLight = new THREE.DirectionalLight(0xfff5d6, 1.2);
+            const sunLight = new THREE.DirectionalLight(0xfff5d6, 1.3);
             sunLight.position.set(10, 20, 15);
             sunLight.castShadow = true;
-            sunLight.shadow.mapSize.width = 1024;
-            sunLight.shadow.mapSize.height = 1024;
             scene.add(sunLight);
 
             // Trajectory Line Setup
             const lineMat = new THREE.LineDashedMaterial({
-                color: 0xff0000,
-                dashSize: 0.3,
-                gapSize: 0.2,
-                linewidth: 3
+                color: 0xff3300,
+                dashSize: 0.25,
+                gapSize: 0.15,
+                linewidth: 4
             });
             const lineGeo = new THREE.BufferGeometry();
             trajectoryLine = new THREE.Line(lineGeo, lineMat);
             scene.add(trajectoryLine);
 
-            // Build Environment
+            // Build Environment & Cannon Weapon
             createIraqiStreet();
+            createVisibleCannon();
 
-            // Event Listeners
+            // Listeners
             window.addEventListener('resize', onWindowResize);
             setupInput();
-            setupUI();
 
-            // Start Level 1
+            // Load First Level
             loadLevel(1);
 
-            // Animation Loop
+            // Loop
             animate();
         }
 
-        // Iraqi Festive Street Scene
+        // Iraqi Festive Street & Rusty Table
         function createIraqiStreet() {
-            // Ground (Road)
+            // Road Ground
             const roadGeo = new THREE.PlaneGeometry(100, 100);
-            const roadMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.9 });
+            const roadMat = new THREE.MeshStandardMaterial({ color: 0x3b3b3b, roughness: 0.9 });
             const road = new THREE.Mesh(roadGeo, roadMat);
             road.rotation.x = -Math.PI / 2;
             road.receiveShadow = true;
@@ -374,17 +339,16 @@
             roadBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
             world.addBody(roadBody);
 
-            // Colorful Houses in Background
+            // Colorful Houses
             const colors = [0xe74c3c, 0xf1c40f, 0x2ecc71, 0x3498db, 0x9b59b6, 0xe67e22];
             for (let i = -40; i <= 40; i += 8) {
-                if (Math.abs(i) < 8) continue; // Leave middle open
+                if (Math.abs(i) < 8) continue;
                 const houseGeo = new THREE.BoxGeometry(7, 10 + Math.random() * 4, 10);
                 const houseMat = new THREE.MeshStandardMaterial({
                     color: colors[Math.floor(Math.random() * colors.length)]
                 });
                 const house = new THREE.Mesh(houseGeo, houseMat);
-                house.position.set(i, 5, -10);
-                house.castShadow = true;
+                house.position.set(i, 5, -12);
                 scene.add(house);
             }
 
@@ -393,9 +357,8 @@
                 const trunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 7, 8);
                 const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
                 const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-                trunk.position.set(i, 3.5, -3);
+                trunk.position.set(i, 3.5, -5);
 
-                // Leaves
                 const leafGroup = new THREE.Group();
                 for (let l = 0; l < 6; l++) {
                     const leafGeo = new THREE.ConeGeometry(1.5, 4, 4);
@@ -410,19 +373,18 @@
                 scene.add(trunk);
             }
 
-            // Rusty Iron Table
+            // Rusty Iron Table (ميز حديد صدأ)
             const tableGroup = new THREE.Group();
-            const topGeo = new THREE.BoxGeometry(6, 0.3, 3);
-            const rustMat = new THREE.MeshStandardMaterial({ color: 0x5a2d0c, roughness: 0.8, metalness: 0.6 });
+            const topGeo = new THREE.BoxGeometry(5.5, 0.3, 2.8);
+            const rustMat = new THREE.MeshStandardMaterial({ color: 0x4a2306, roughness: 0.85, metalness: 0.7 }); // مظهر صدأ وتأكسد
             const top = new THREE.Mesh(topGeo, rustMat);
             top.position.y = 2.5;
             top.castShadow = true;
             top.receiveShadow = true;
             tableGroup.add(top);
 
-            // Table Legs
-            const legGeo = new THREE.CylinderGeometry(0.1, 0.1, 2.5);
-            const legPositions = [[-2.8, 1.25, -1.3], [2.8, 1.25, -1.3], [-2.8, 1.25, 1.3], [2.8, 1.25, 1.3]];
+            const legGeo = new THREE.CylinderGeometry(0.12, 0.12, 2.5);
+            const legPositions = [[-2.5, 1.25, -1.1], [2.5, 1.25, -1.1], [-2.5, 1.25, 1.1], [2.5, 1.25, 1.1]];
             legPositions.forEach(pos => {
                 const leg = new THREE.Mesh(legGeo, rustMat);
                 leg.position.set(...pos);
@@ -431,50 +393,89 @@
             });
             scene.add(tableGroup);
 
-            // Table Physics Body
             const tableBody = new CANNON.Body({ mass: 0 });
-            tableBody.addShape(new CANNON.Box(new CANNON.Vec3(3, 0.15, 1.5)), new CANNON.Vec3(0, 2.5, 0));
+            tableBody.addShape(new CANNON.Box(new CANNON.Vec3(2.75, 0.15, 1.4)), new CANNON.Vec3(0, 2.5, 0));
             world.addBody(tableBody);
         }
 
-        // Level Generation (1 - 100)
+        // Create Visible Cannon & Stone in Front of Player
+        function createVisibleCannon() {
+            const cannonGroup = new THREE.Group();
+
+            // Base Stand
+            const baseGeo = new THREE.BoxGeometry(1.2, 0.4, 1.5);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.5 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.set(0, 0.2, 0);
+            cannonGroup.add(base);
+
+            // Barrel (المدفع)
+            const barrelGeo = new THREE.CylinderGeometry(0.45, 0.55, 2.2, 16);
+            const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1abc9c, metalness: 0.8, roughness: 0.2 });
+            const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+            barrel.rotation.x = Math.PI / 2.5; // موجه للأعلى نحو الأهداف
+            barrel.position.set(0, 0.8, -0.5);
+            cannonGroup.add(barrel);
+
+            cannonGroup.position.copy(slingPos);
+            cannonGroup.position.z += 0.8;
+            scene.add(cannonGroup);
+            cannonMesh = cannonGroup;
+
+            // Spawn Ready Stone (حجر مرئي جاهز للإطلاق)
+            spawnReadyStone();
+        }
+
+        function spawnReadyStone() {
+            if (currentStoneMesh) scene.remove(currentStoneMesh);
+            const geo = new THREE.DodecahedronGeometry(0.42, 1);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, roughness: 0.95 });
+            currentStoneMesh = new THREE.Mesh(geo, mat);
+            currentStoneMesh.position.copy(slingPos);
+            currentStoneMesh.castShadow = true;
+            scene.add(currentStoneMesh);
+        }
+
+        // Level Generation (1 to 100)
         function loadLevel(lvl) {
             currentLevel = lvl;
-            ammo = Math.max(3, 6 - Math.floor(lvl / 25));
+            maxAmmo = Math.max(3, 6 - Math.floor(lvl / 25));
+            ammo = maxAmmo;
             gameActive = true;
 
             document.getElementById('level-display').innerText = `المستوى: ${currentLevel}`;
             document.getElementById('ammo-display').innerText = `الأحجار: ${ammo}`;
 
-            // Clear old targets
+            // Clean Targets
             targets.forEach(t => {
                 scene.remove(t.mesh);
                 world.remove(t.body);
             });
             targets = [];
 
-            // Clear active stones
+            // Clean active flying stones
             activeStones.forEach(s => {
                 scene.remove(s.mesh);
                 world.remove(s.body);
             });
             activeStones = [];
 
-            // Build Targets on Table (y starting at 2.65)
-            const startY = 2.8;
+            spawnReadyStone();
+
+            // Build pyramid/structure on rusty table (y starting at 2.7)
+            const startY = 2.75;
             const rows = Math.min(6, 2 + Math.floor(lvl / 15));
             const cols = Math.min(5, 2 + Math.floor(lvl / 20));
 
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
-                    const x = (c - (cols - 1) / 2) * 0.9;
-                    const y = startY + r * 0.8;
-                    const z = (Math.random() - 0.5) * 0.5;
+                    const x = (c - (cols - 1) / 2) * 0.85;
+                    const y = startY + r * 0.75;
+                    const z = (Math.random() - 0.5) * 0.4;
 
-                    // Decide Target Type based on level & row
-                    let type = 'can'; // Tomato Can
-                    if (lvl > 10 && (r + c) % 2 === 0) type = 'brick'; // Red Brick
-                    if (lvl > 30 && r % 2 === 1) type = 'block'; // Heavy Concrete Block
+                    let type = 'can'; // علبة طماطم ومعلبات مفتوحة
+                    if (lvl > 10 && (r + c) % 2 === 0) type = 'brick'; // طابوق فخاري
+                    if (lvl > 30 && r % 2 === 1) type = 'block'; // بلوك أسمنتي ثقيل
 
                     createTarget(x, y, z, type);
                 }
@@ -485,26 +486,23 @@
             let mesh, body, mass, shape;
 
             if (type === 'can') {
-                // Tin Can
-                const geo = new THREE.CylinderGeometry(0.3, 0.3, 0.7, 16);
-                const mat = new THREE.MeshStandardMaterial({ color: 0xc0392b, metalness: 0.5, roughness: 0.3 });
+                const geo = new THREE.CylinderGeometry(0.28, 0.28, 0.65, 16);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xd35400, metalness: 0.6, roughness: 0.3 }); // علبة طماطم
                 mesh = new THREE.Mesh(geo, mat);
-                mass = 1;
-                shape = new CANNON.Cylinder(0.3, 0.3, 0.7, 16);
+                mass = 1.2;
+                shape = new CANNON.Cylinder(0.28, 0.28, 0.65, 16);
             } else if (type === 'brick') {
-                // Red Brick
-                const geo = new THREE.BoxGeometry(0.8, 0.4, 0.4);
-                const mat = new THREE.MeshStandardMaterial({ color: 0x962d2d, roughness: 0.9 });
+                const geo = new THREE.BoxGeometry(0.75, 0.38, 0.38);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xa93226, roughness: 0.85 }); // طابوق أحمر
                 mesh = new THREE.Mesh(geo, mat);
                 mass = 2.5;
-                shape = new CANNON.Box(new CANNON.Vec3(0.4, 0.2, 0.2));
+                shape = new CANNON.Box(new CANNON.Vec3(0.37, 0.19, 0.19));
             } else {
-                // Heavy Block
-                const geo = new THREE.BoxGeometry(0.9, 0.5, 0.5);
-                const mat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, roughness: 0.9 });
+                const geo = new THREE.BoxGeometry(0.85, 0.45, 0.45);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x5d6d7e, roughness: 0.9 }); // بلوك أسمنتي
                 mesh = new THREE.Mesh(geo, mat);
-                mass = 5;
-                shape = new CANNON.Box(new CANNON.Vec3(0.45, 0.25, 0.25));
+                mass = 4.5;
+                shape = new CANNON.Box(new CANNON.Vec3(0.42, 0.225, 0.225));
             }
 
             mesh.position.set(x, y, z);
@@ -515,7 +513,6 @@
             body = new CANNON.Body({ mass: mass, shape: shape });
             body.position.set(x, y, z);
 
-            // Hit sound callback
             body.addEventListener('collide', (e) => {
                 if (e.contact.getImpactVelocityAlongNormal() > 1.5) {
                     playSound('hit');
@@ -523,10 +520,10 @@
             });
 
             world.addBody(body);
-            targets.push({ mesh, body, initialY: y });
+            targets.push({ mesh, body });
         }
 
-        // Shoot Boulder
+        // Throwing Action with Precision
         function throwStone(impulseVector) {
             if (ammo <= 0 || !gameActive) return;
 
@@ -534,27 +531,31 @@
             document.getElementById('ammo-display').innerText = `الأحجار: ${ammo}`;
             playSound('shoot');
 
-            // Stone Mesh (Boulder)
-            const geo = new THREE.DodecahedronGeometry(0.4, 1);
-            const mat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.9 });
+            if (currentStoneMesh) {
+                scene.remove(currentStoneMesh);
+                currentStoneMesh = null;
+            }
+
+            // Stone Projectile Mesh
+            const geo = new THREE.DodecahedronGeometry(0.42, 1);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, roughness: 0.95 });
             const mesh = new THREE.Mesh(geo, mat);
             mesh.castShadow = true;
             scene.add(mesh);
 
-            // Stone Body
-            const shape = new CANNON.Sphere(0.4);
-            const body = new CANNON.Body({ mass: 4, shape: shape });
-            body.position.set(0, 2, 12); // Start at sling position
+            const shape = new CANNON.Sphere(0.42);
+            const body = new CANNON.Body({ mass: 4.5, shape: shape });
+            body.position.copy(slingPos);
             body.velocity.set(impulseVector.x, impulseVector.y, impulseVector.z);
             world.addBody(body);
 
             activeStones.push({ mesh, body });
 
-            // Check Win/Fail state after delay
-            setTimeout(checkGameStatus, 3500);
+            // Check results after motion settled
+            setTimeout(checkGameStatus, 3200);
         }
 
-        // Input Setup (Aiming with Touch / Mouse)
+        // Touch and Mouse Controls for Accurate Aiming
         function setupInput() {
             const container = document.getElementById('game-container');
 
@@ -581,13 +582,16 @@
                 clearTrajectory();
 
                 const dx = dragStart.x - dragCurrent.x;
-                const dy = dragStart.y - dragCurrent.y; // Dragging down pulls back
+                const dy = dragStart.y - dragCurrent.y; // السحب للأسفل يولد طاقة إطلاق للأمام
 
-                if (dy > 20) { // Minimum pull
-                    const forceX = dx * 0.08;
-                    const forceY = Math.min(dy * 0.12, 25);
-                    const forceZ = -Math.min(dy * 0.25, 40);
+                if (dy > 15) {
+                    const forceX = dx * 0.09;
+                    const forceY = Math.min(dy * 0.14, 28);
+                    const forceZ = -Math.min(dy * 0.28, 45);
                     throwStone(new THREE.Vector3(forceX, forceY, forceZ));
+                } else {
+                    // إذا لم يسحب كافياً، أعد الحجر لمكانه المرئي
+                    if (!currentStoneMesh) spawnReadyStone();
                 }
             };
 
@@ -600,31 +604,41 @@
             window.addEventListener('touchend', onEnd);
         }
 
-        // Trajectory Line Math
+        // Trajectory Line Simulation
         function updateTrajectory() {
             const dx = dragStart.x - dragCurrent.x;
             const dy = dragStart.y - dragCurrent.y;
 
             if (dy <= 0) {
                 clearTrajectory();
+                if (currentStoneMesh) currentStoneMesh.position.copy(slingPos);
                 return;
             }
 
-            const vx = dx * 0.08;
-            const vy = Math.min(dy * 0.12, 25);
-            const vz = -Math.min(dy * 0.25, 40);
+            const vx = dx * 0.09;
+            const vy = Math.min(dy * 0.14, 28);
+            const vz = -Math.min(dy * 0.28, 45);
+
+            // تحريك الحجر المرئي للخلف قليلاً أثناء الشد للتفاعل البصري
+            if (currentStoneMesh) {
+                currentStoneMesh.position.set(
+                    slingPos.x + (dx * 0.002),
+                    Math.max(0.4, slingPos.y - (dy * 0.003)),
+                    slingPos.y + Math.min(1.5, dy * 0.01)
+                );
+            }
 
             const points = [];
-            let px = 0, py = 2, pz = 12;
-            let simVx = vx / 4, simVy = vy / 4, simVz = vz / 4; // Simulated mass/step
+            let px = slingPos.x, py = slingPos.y, pz = slingPos.z;
+            let simVx = vx / 4.5, simVy = vy / 4.5, simVz = vz / 4.5;
 
-            for (let t = 0; t < 30; t++) {
+            for (let t = 0; t < 35; t++) {
                 points.push(new THREE.Vector3(px, py, pz));
                 px += simVx * 0.1;
                 py += simVy * 0.1 - 0.5 * 9.8 * 0.01;
                 pz += simVz * 0.1;
                 simVy -= 9.8 * 0.02;
-                if (py < 2.5) break; // Table height
+                if (py < 2.5) break; // اصطدام افتراضي بالطاولة
             }
 
             trajectoryLine.geometry.dispose();
@@ -637,42 +651,49 @@
             trajectoryLine.visible = false;
         }
 
-        // Check Win or Fail Condition
+        // Game State Validation
         function checkGameStatus() {
             if (!gameActive) return;
 
-            // Count targets knocked off table (y < 2.0)
             let knockedDown = 0;
             targets.forEach(t => {
-                if (t.body.position.y < 2.2) {
+                if (t.body.position.y < 2.25) { // سقطت عن الميز
                     knockedDown++;
                 }
             });
 
             if (knockedDown === targets.length) {
-                // Victory
+                // Win Condition
                 gameActive = false;
                 playSound('win');
                 const randomWinMsg = winMessages[Math.floor(Math.random() * winMessages.length)];
-                showModal('فوز ساحق! 🎉', randomWinMsg, 'المستوى التالي', () => {
+                
+                // الانتقال التلقائي للمرحلة التالية بضغط "ابدأ اللعبة"
+                showModal('فوز ساحق! 🎉', randomWinMsg, 'ابدأ اللعبة 🚀', () => {
                     hideModal();
                     loadLevel(currentLevel + 1);
                 });
             } else if (ammo === 0) {
-                // Check if any moving stones exist
-                const stillMoving = activeStones.some(s => s.body.velocity.length() > 0.5);
+                const stillMoving = activeStones.some(s => s.body.velocity.length() > 0.4);
                 if (!stillMoving) {
+                    // Fail Condition (عند اكتمال الاحجار ونفادها يظهر اشعار الخسارة وزر الاعادة)
                     gameActive = false;
                     playSound('fail');
-                    showModal('خسارة! 💥', failMessage, 'إعادة المحاولة 🔄', () => {
+                    showModal('انتهت الأحجار! 💥', failMessage, 'إعادة المحاولة 🔄', () => {
                         hideModal();
                         loadLevel(currentLevel);
                     });
+                } else {
+                    setTimeout(checkGameStatus, 1500);
+                }
+            } else {
+                // إعداد حجر جديد في المدفع للرمية التالية
+                if (!currentStoneMesh && gameActive) {
+                    spawnReadyStone();
                 }
             }
         }
 
-        // Modal Controllers
         function showModal(title, msg, btnText, action) {
             const modal = document.getElementById('result-modal');
             document.getElementById('modal-title').innerText = title;
@@ -691,50 +712,23 @@
             document.getElementById('result-modal').classList.remove('active');
         }
 
-        function setupUI() {
-            // Level Selector Setup
-            const levelGrid = document.getElementById('level-grid');
-            for (let i = 1; i <= 100; i++) {
-                const b = document.createElement('button');
-                b.className = 'level-btn';
-                b.innerText = i;
-                b.onclick = () => {
-                    document.getElementById('level-modal').classList.remove('active');
-                    hideModal();
-                    loadLevel(i);
-                };
-                levelGrid.appendChild(b);
-            }
-
-            document.getElementById('select-lvl-btn').onclick = () => {
-                document.getElementById('level-modal').classList.add('active');
-            };
-
-            document.getElementById('close-level-btn').onclick = () => {
-                document.getElementById('level-modal').classList.remove('active');
-            };
-        }
-
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // Main Loop
+        // Render Loop
         function animate() {
             requestAnimationFrame(animate);
 
-            // Step Physics
             world.step(1 / 60);
 
-            // Sync Target Meshes with Bodies
             targets.forEach(t => {
                 t.mesh.position.copy(t.body.position);
                 t.mesh.quaternion.copy(t.body.quaternion);
             });
 
-            // Sync Stone Meshes
             activeStones.forEach(s => {
                 s.mesh.position.copy(s.body.position);
                 s.mesh.quaternion.copy(s.body.quaternion);
@@ -743,7 +737,6 @@
             renderer.render(scene, camera);
         }
 
-        // Run
         window.onload = init;
     </script>
 </body>
