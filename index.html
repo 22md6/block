@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>وكع البلوك - الشارع العراقي</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #111;
+        }
+        #game-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+        /* UI Overlay */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 15px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 15px;
+            color: #fff;
+            backdrop-filter: blur(5px);
+            border: 2px solid #f39c12;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .game-title {
+            font-size: 22px;
+            font-weight: bold;
+            color: #f1c40f;
+            text-shadow: 2px 2px 4px #000;
+        }
+        .stats {
+            display: flex;
+            gap: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .stat-box {
+            background: rgba(255,255,255,0.1);
+            padding: 5px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .aim-instruction {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #00ffcc;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: 1px solid #00ffcc;
+            box-shadow: 0 0 10px rgba(0,255,204,0.3);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.7; transform: translateX(-50%) scale(0.98); }
+            50% { opacity: 1; transform: translateX(-50%) scale(1.02); }
+            100% { opacity: 0.7; transform: translateX(-50%) scale(0.98); }
+        }
+        /* Modals */
+        .modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            pointer-events: auto;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        .modal.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background: linear-gradient(135deg, #2c3e50, #1a252f);
+            border: 3px solid #f1c40f;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 90%;
+            width: 350px;
+            box-shadow: 0 0 30px rgba(241, 196, 15, 0.4);
+        }
+        .modal-title {
+            font-size: 28px;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        .modal-msg {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 25px;
+            color: #e74c3c;
+            line-height: 1.4;
+        }
+        .win-msg {
+            color: #2ecc71;
+        }
+        .btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px 0 #1e8449;
+            transition: all 0.1s;
+            margin: 5px;
+        }
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 1px 0 #1e8449;
+        }
+        .btn-retry {
+            background: #e67e22;
+            box-shadow: 0 5px 0 #d35400;
+        }
+        .btn-retry:active {
+            box-shadow: 0 1px 0 #d35400;
+        }
+        .level-select-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            max-height: 250px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+        }
+        .level-btn {
+            background: #34495e;
+            color: #fff;
+            border: 1px solid #7f8c8d;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .level-btn.active {
+            background: #f1c40f;
+            color: #000;
+            border-color: #f39c12;
+        }
+        /* Custom scrollbar */
+        .level-select-grid::-webkit-scrollbar { width: 6px; }
+        .level-select-grid::-webkit-scrollbar-thumb { background: #f1c40f; border-radius: 3px; }
+    </style>
+    <!-- Three.js & Cannon.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="canvas-container"></div>
+
+        <div class="ui-layer">
+            <div class="header">
+                <div class="game-title">وكع البلوك 🧱</div>
+                <div class="stats">
+                    <div class="stat-box" id="level-display">المستوى: 1</div>
+                    <div class="stat-box" id="ammo-display">الأحجار: 5</div>
+                </div>
+            </div>
+            <div class="aim-instruction">🎯 اسحب للخلف وللأعلى للتصويب بالإصبع</div>
+        </div>
+
+        <!-- Result Modal -->
+        <div class="modal" id="result-modal">
+            <div class="modal-content">
+                <div class="modal-title" id="modal-title">النتيجة</div>
+                <div class="modal-msg" id="modal-msg">---</div>
+                <button class="btn" id="modal-btn">المستوى التالي</button>
+                <button class="btn btn-retry" id="select-lvl-btn">اختيار مستوى</button>
+            </div>
+        </div>
+
+        <!-- Level Select Modal -->
+        <div class="modal" id="level-modal">
+            <div class="modal-content">
+                <div class="modal-title">اختر المستوى (1 - 100)</div>
+                <div class="level-select-grid" id="level-grid"></div>
+                <button class="btn btn-retry" id="close-level-btn">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Audio Synthesizer
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'shoot') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.2);
+                gain.gain.setValueAtTime(1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.2);
+            } else if (type === 'hit') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(80, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            } else if (type === 'win') {
+                const now = audioCtx.currentTime;
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(261.63, now);
+                osc.frequency.setValueAtTime(329.63, now + 0.1);
+                osc.frequency.setValueAtTime(392.00, now + 0.2);
+                osc.frequency.setValueAtTime(523.25, now + 0.3);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start();
+                osc.stop(now + 0.5);
+            } else if (type === 'fail') {
+                const now = audioCtx.currentTime;
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.4);
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start();
+                osc.stop(now + 0.4);
+            }
+        }
+
+        // Game Setup Variables
+        let currentLevel = 1;
+        let ammo = 5;
+        let gameActive = true;
+        let targets = [];
+        let activeStones = [];
+        let trajectoryPoints = [];
+
+        // ThreeJS & Cannon Variables
+        let scene, camera, renderer, world;
+        let stoneMaterial, tableMaterial, blockMaterial;
+
+        // Interaction
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let dragCurrent = { x: 0, y: 0 };
+
+        const winMessages = ["أحسنت ابن المطي! 👏", "ممتاز يا حيوان! 🎉"];
+        const failMessage = "طيح الله حظك! 💩";
+
+        function init() {
+            // Three.js Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // السماء
+            scene.fog = new THREE.FogExp2(0x87CEEB, 0.015);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 18);
+            camera.lookAt(0, 3, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Cannon.js Physics World
+            world = new CANNON.World();
+            world.gravity.set(0, -9.82, 0);
+            world.broadphase = new CANNON.NaiveBroadphase();
+            world.defaultContactMaterial.friction = 0.4;
+            world.defaultContactMaterial.restitution = 0.2;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfff5d6, 1.2);
+            sunLight.position.set(10, 20, 15);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 1024;
+            sunLight.shadow.mapSize.height = 1024;
+            scene.add(sunLight);
+
+            // Trajectory Line Setup
+            const lineMat = new THREE.LineDashedMaterial({
+                color: 0xff0000,
+                dashSize: 0.3,
+                gapSize: 0.2,
+                linewidth: 3
+            });
+            const lineGeo = new THREE.BufferGeometry();
+            trajectoryLine = new THREE.Line(lineGeo, lineMat);
+            scene.add(trajectoryLine);
+
+            // Build Environment
+            createIraqiStreet();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            setupInput();
+            setupUI();
+
+            // Start Level 1
+            loadLevel(1);
+
+            // Animation Loop
+            animate();
+        }
+
+        // Iraqi Festive Street Scene
+        function createIraqiStreet() {
+            // Ground (Road)
+            const roadGeo = new THREE.PlaneGeometry(100, 100);
+            const roadMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.9 });
+            const road = new THREE.Mesh(roadGeo, roadMat);
+            road.rotation.x = -Math.PI / 2;
+            road.receiveShadow = true;
+            scene.add(road);
+
+            const roadBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
+            roadBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+            world.addBody(roadBody);
+
+            // Colorful Houses in Background
+            const colors = [0xe74c3c, 0xf1c40f, 0x2ecc71, 0x3498db, 0x9b59b6, 0xe67e22];
+            for (let i = -40; i <= 40; i += 8) {
+                if (Math.abs(i) < 8) continue; // Leave middle open
+                const houseGeo = new THREE.BoxGeometry(7, 10 + Math.random() * 4, 10);
+                const houseMat = new THREE.MeshStandardMaterial({
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                });
+                const house = new THREE.Mesh(houseGeo, houseMat);
+                house.position.set(i, 5, -10);
+                house.castShadow = true;
+                scene.add(house);
+            }
+
+            // Palm Trees
+            for (let i = -15; i <= 15; i += 30) {
+                const trunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 7, 8);
+                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.set(i, 3.5, -3);
+
+                // Leaves
+                const leafGroup = new THREE.Group();
+                for (let l = 0; l < 6; l++) {
+                    const leafGeo = new THREE.ConeGeometry(1.5, 4, 4);
+                    const leafMat = new THREE.MeshStandardMaterial({ color: 0x27ae60 });
+                    const leaf = new THREE.Mesh(leafGeo, leafMat);
+                    leaf.rotation.x = Math.PI / 3;
+                    leaf.rotation.y = (l * Math.PI) / 3;
+                    leaf.position.y = 3.5;
+                    leafGroup.add(leaf);
+                }
+                trunk.add(leafGroup);
+                scene.add(trunk);
+            }
+
+            // Rusty Iron Table
+            const tableGroup = new THREE.Group();
+            const topGeo = new THREE.BoxGeometry(6, 0.3, 3);
+            const rustMat = new THREE.MeshStandardMaterial({ color: 0x5a2d0c, roughness: 0.8, metalness: 0.6 });
+            const top = new THREE.Mesh(topGeo, rustMat);
+            top.position.y = 2.5;
+            top.castShadow = true;
+            top.receiveShadow = true;
+            tableGroup.add(top);
+
+            // Table Legs
+            const legGeo = new THREE.CylinderGeometry(0.1, 0.1, 2.5);
+            const legPositions = [[-2.8, 1.25, -1.3], [2.8, 1.25, -1.3], [-2.8, 1.25, 1.3], [2.8, 1.25, 1.3]];
+            legPositions.forEach(pos => {
+                const leg = new THREE.Mesh(legGeo, rustMat);
+                leg.position.set(...pos);
+                leg.castShadow = true;
+                tableGroup.add(leg);
+            });
+            scene.add(tableGroup);
+
+            // Table Physics Body
+            const tableBody = new CANNON.Body({ mass: 0 });
+            tableBody.addShape(new CANNON.Box(new CANNON.Vec3(3, 0.15, 1.5)), new CANNON.Vec3(0, 2.5, 0));
+            world.addBody(tableBody);
+        }
+
+        // Level Generation (1 - 100)
+        function loadLevel(lvl) {
+            currentLevel = lvl;
+            ammo = Math.max(3, 6 - Math.floor(lvl / 25));
+            gameActive = true;
+
+            document.getElementById('level-display').innerText = `المستوى: ${currentLevel}`;
+            document.getElementById('ammo-display').innerText = `الأحجار: ${ammo}`;
+
+            // Clear old targets
+            targets.forEach(t => {
+                scene.remove(t.mesh);
+                world.remove(t.body);
+            });
+            targets = [];
+
+            // Clear active stones
+            activeStones.forEach(s => {
+                scene.remove(s.mesh);
+                world.remove(s.body);
+            });
+            activeStones = [];
+
+            // Build Targets on Table (y starting at 2.65)
+            const startY = 2.8;
+            const rows = Math.min(6, 2 + Math.floor(lvl / 15));
+            const cols = Math.min(5, 2 + Math.floor(lvl / 20));
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const x = (c - (cols - 1) / 2) * 0.9;
+                    const y = startY + r * 0.8;
+                    const z = (Math.random() - 0.5) * 0.5;
+
+                    // Decide Target Type based on level & row
+                    let type = 'can'; // Tomato Can
+                    if (lvl > 10 && (r + c) % 2 === 0) type = 'brick'; // Red Brick
+                    if (lvl > 30 && r % 2 === 1) type = 'block'; // Heavy Concrete Block
+
+                    createTarget(x, y, z, type);
+                }
+            }
+        }
+
+        function createTarget(x, y, z, type) {
+            let mesh, body, mass, shape;
+
+            if (type === 'can') {
+                // Tin Can
+                const geo = new THREE.CylinderGeometry(0.3, 0.3, 0.7, 16);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xc0392b, metalness: 0.5, roughness: 0.3 });
+                mesh = new THREE.Mesh(geo, mat);
+                mass = 1;
+                shape = new CANNON.Cylinder(0.3, 0.3, 0.7, 16);
+            } else if (type === 'brick') {
+                // Red Brick
+                const geo = new THREE.BoxGeometry(0.8, 0.4, 0.4);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x962d2d, roughness: 0.9 });
+                mesh = new THREE.Mesh(geo, mat);
+                mass = 2.5;
+                shape = new CANNON.Box(new CANNON.Vec3(0.4, 0.2, 0.2));
+            } else {
+                // Heavy Block
+                const geo = new THREE.BoxGeometry(0.9, 0.5, 0.5);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d, roughness: 0.9 });
+                mesh = new THREE.Mesh(geo, mat);
+                mass = 5;
+                shape = new CANNON.Box(new CANNON.Vec3(0.45, 0.25, 0.25));
+            }
+
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            body = new CANNON.Body({ mass: mass, shape: shape });
+            body.position.set(x, y, z);
+
+            // Hit sound callback
+            body.addEventListener('collide', (e) => {
+                if (e.contact.getImpactVelocityAlongNormal() > 1.5) {
+                    playSound('hit');
+                }
+            });
+
+            world.addBody(body);
+            targets.push({ mesh, body, initialY: y });
+        }
+
+        // Shoot Boulder
+        function throwStone(impulseVector) {
+            if (ammo <= 0 || !gameActive) return;
+
+            ammo--;
+            document.getElementById('ammo-display').innerText = `الأحجار: ${ammo}`;
+            playSound('shoot');
+
+            // Stone Mesh (Boulder)
+            const geo = new THREE.DodecahedronGeometry(0.4, 1);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.9 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.castShadow = true;
+            scene.add(mesh);
+
+            // Stone Body
+            const shape = new CANNON.Sphere(0.4);
+            const body = new CANNON.Body({ mass: 4, shape: shape });
+            body.position.set(0, 2, 12); // Start at sling position
+            body.velocity.set(impulseVector.x, impulseVector.y, impulseVector.z);
+            world.addBody(body);
+
+            activeStones.push({ mesh, body });
+
+            // Check Win/Fail state after delay
+            setTimeout(checkGameStatus, 3500);
+        }
+
+        // Input Setup (Aiming with Touch / Mouse)
+        function setupInput() {
+            const container = document.getElementById('game-container');
+
+            const onStart = (e) => {
+                if (!gameActive || ammo <= 0) return;
+                isDragging = true;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                dragStart = { x: clientX, y: clientY };
+                dragCurrent = { x: clientX, y: clientY };
+            };
+
+            const onMove = (e) => {
+                if (!isDragging) return;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                dragCurrent = { x: clientX, y: clientY };
+                updateTrajectory();
+            };
+
+            const onEnd = () => {
+                if (!isDragging) return;
+                isDragging = false;
+                clearTrajectory();
+
+                const dx = dragStart.x - dragCurrent.x;
+                const dy = dragStart.y - dragCurrent.y; // Dragging down pulls back
+
+                if (dy > 20) { // Minimum pull
+                    const forceX = dx * 0.08;
+                    const forceY = Math.min(dy * 0.12, 25);
+                    const forceZ = -Math.min(dy * 0.25, 40);
+                    throwStone(new THREE.Vector3(forceX, forceY, forceZ));
+                }
+            };
+
+            container.addEventListener('mousedown', onStart);
+            container.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+
+            container.addEventListener('touchstart', onStart);
+            container.addEventListener('touchmove', onMove);
+            window.addEventListener('touchend', onEnd);
+        }
+
+        // Trajectory Line Math
+        function updateTrajectory() {
+            const dx = dragStart.x - dragCurrent.x;
+            const dy = dragStart.y - dragCurrent.y;
+
+            if (dy <= 0) {
+                clearTrajectory();
+                return;
+            }
+
+            const vx = dx * 0.08;
+            const vy = Math.min(dy * 0.12, 25);
+            const vz = -Math.min(dy * 0.25, 40);
+
+            const points = [];
+            let px = 0, py = 2, pz = 12;
+            let simVx = vx / 4, simVy = vy / 4, simVz = vz / 4; // Simulated mass/step
+
+            for (let t = 0; t < 30; t++) {
+                points.push(new THREE.Vector3(px, py, pz));
+                px += simVx * 0.1;
+                py += simVy * 0.1 - 0.5 * 9.8 * 0.01;
+                pz += simVz * 0.1;
+                simVy -= 9.8 * 0.02;
+                if (py < 2.5) break; // Table height
+            }
+
+            trajectoryLine.geometry.dispose();
+            trajectoryLine.geometry = new THREE.BufferGeometry().setFromPoints(points);
+            trajectoryLine.computeLineDistances();
+            trajectoryLine.visible = true;
+        }
+
+        function clearTrajectory() {
+            trajectoryLine.visible = false;
+        }
+
+        // Check Win or Fail Condition
+        function checkGameStatus() {
+            if (!gameActive) return;
+
+            // Count targets knocked off table (y < 2.0)
+            let knockedDown = 0;
+            targets.forEach(t => {
+                if (t.body.position.y < 2.2) {
+                    knockedDown++;
+                }
+            });
+
+            if (knockedDown === targets.length) {
+                // Victory
+                gameActive = false;
+                playSound('win');
+                const randomWinMsg = winMessages[Math.floor(Math.random() * winMessages.length)];
+                showModal('فوز ساحق! 🎉', randomWinMsg, 'المستوى التالي', () => {
+                    hideModal();
+                    loadLevel(currentLevel + 1);
+                });
+            } else if (ammo === 0) {
+                // Check if any moving stones exist
+                const stillMoving = activeStones.some(s => s.body.velocity.length() > 0.5);
+                if (!stillMoving) {
+                    gameActive = false;
+                    playSound('fail');
+                    showModal('خسارة! 💥', failMessage, 'إعادة المحاولة 🔄', () => {
+                        hideModal();
+                        loadLevel(currentLevel);
+                    });
+                }
+            }
+        }
+
+        // Modal Controllers
+        function showModal(title, msg, btnText, action) {
+            const modal = document.getElementById('result-modal');
+            document.getElementById('modal-title').innerText = title;
+            const msgElem = document.getElementById('modal-msg');
+            msgElem.innerText = msg;
+            msgElem.className = 'modal-msg ' + (title.includes('فوز') ? 'win-msg' : '');
+
+            const btn = document.getElementById('modal-btn');
+            btn.innerText = btnText;
+            btn.onclick = action;
+
+            modal.classList.add('active');
+        }
+
+        function hideModal() {
+            document.getElementById('result-modal').classList.remove('active');
+        }
+
+        function setupUI() {
+            // Level Selector Setup
+            const levelGrid = document.getElementById('level-grid');
+            for (let i = 1; i <= 100; i++) {
+                const b = document.createElement('button');
+                b.className = 'level-btn';
+                b.innerText = i;
+                b.onclick = () => {
+                    document.getElementById('level-modal').classList.remove('active');
+                    hideModal();
+                    loadLevel(i);
+                };
+                levelGrid.appendChild(b);
+            }
+
+            document.getElementById('select-lvl-btn').onclick = () => {
+                document.getElementById('level-modal').classList.add('active');
+            };
+
+            document.getElementById('close-level-btn').onclick = () => {
+                document.getElementById('level-modal').classList.remove('active');
+            };
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Main Loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Step Physics
+            world.step(1 / 60);
+
+            // Sync Target Meshes with Bodies
+            targets.forEach(t => {
+                t.mesh.position.copy(t.body.position);
+                t.mesh.quaternion.copy(t.body.quaternion);
+            });
+
+            // Sync Stone Meshes
+            activeStones.forEach(s => {
+                s.mesh.position.copy(s.body.position);
+                s.mesh.quaternion.copy(s.body.quaternion);
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // Run
+        window.onload = init;
+    </script>
+</body>
+</html>
